@@ -187,7 +187,7 @@ def extract_text(uploaded_file) -> str:
 
 # ── Helper: Gemini dynamic extraction ────────────────────────────────────────
 def gemini_extract(doc_text: str, question: str) -> dict:
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    model = genai.GenerativeModel("gemini-2.0-flash")
 
     prompt = f"""You are a contract risk analysis expert.
 
