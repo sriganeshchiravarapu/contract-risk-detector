@@ -45,14 +45,14 @@ def gemini_extract(doc_text, question):
 
     try:
         response = client.models.generate_content(
-            model="gemini-1.5-flash",
+            model="gemini-1.5-flash-latest",
             contents=prompt
         )
     except Exception:
         # retry once if quota delay
         time.sleep(5)
         response = client.models.generate_content(
-            model="gemini-1.5-flash",
+            model="gemini-1.5-flash-latest",
             contents=prompt
         )
 
