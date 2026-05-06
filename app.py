@@ -2,36 +2,31 @@ import streamlit as st
 import pdfplumber
 import json
 import requests
+import time
 from google import genai
 
-# ✅ Create Gemini client (NEW SDK)
+# ✅ Gemini client (free tier safe)
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 
-# ── Page config ─────────────────────────────────────────
-st.set_page_config(
-    page_title="Contract Risk Detector",
-    page_icon="⚖️",
-    layout="wide",
-)
-
+# ── Page Config ─────────────────────────────
+st.set_page_config(page_title="Contract Risk Detector", layout="wide")
 st.title("⚖️ Contract Risk Detector")
 
-# ── Extract text ────────────────────────────────────────
+# ── Extract Text ────────────────────────────
 def extract_text(uploaded_file):
     if uploaded_file.type == "application/pdf":
         with pdfplumber.open(uploaded_file) as pdf:
             return "\n".join(p.extract_text() or "" for p in pdf.pages)
     return uploaded_file.read().decode("utf-8", errors="ignore")
 
-
-# ── Gemini Extraction (FIXED) ───────────────────────────
+# ── Gemini Extraction (FREE SAFE VERSION) ───
 def gemini_extract(doc_text, question):
 
     prompt = f"""
     You are a contract risk analysis expert.
 
     DOCUMENT:
-    {doc_text[:12000]}
+    {doc_text[:1500]}
 
     QUESTION:
     {question}
@@ -48,38 +43,42 @@ def gemini_extract(doc_text, question):
     }}
     """
 
-    response = client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=prompt
-    )
+    try:
+        response = client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=prompt
+        )
+    except Exception:
+        # retry once if quota delay
+        time.sleep(5)
+        response = client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=prompt
+        )
 
     raw = response.text.strip()
 
-    # Clean markdown if present
+    # Clean markdown if exists
     if raw.startswith("```"):
         raw = raw.replace("```json", "").replace("```", "")
 
     return json.loads(raw)
 
-
-# ── n8n Webhook ─────────────────────────────────────────
+# ── n8n Webhook ─────────────────────────────
 def call_n8n(doc_text, extracted, question, recipient):
     url = st.secrets["N8N_WEBHOOK_URL"]
 
     payload = {
-        "document_text": doc_text[:6000],
+        "document_text": doc_text[:1500],
         "extracted_data": extracted,
         "user_question": question,
         "recipient_email": recipient,
     }
 
     res = requests.post(url, json=payload)
-
     return res.json()
 
-
-# ── UI ──────────────────────────────────────────────────
-
+# ── UI ──────────────────────────────────────
 uploaded_file = st.file_uploader("Upload Contract", type=["pdf", "txt"])
 question = st.text_area("Ask your question")
 
@@ -95,6 +94,7 @@ if st.button("🔍 Analyse Document"):
 
             try:
                 data = gemini_extract(text, question)
+
                 st.session_state["data"] = data
                 st.session_state["text"] = text
                 st.session_state["question"] = question
@@ -102,10 +102,9 @@ if st.button("🔍 Analyse Document"):
                 st.success("Extraction done")
 
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error(f"Gemini error: {e}")
 
-
-# ── Show extracted data ─────────────────────────────────
+# ── Show Output ─────────────────────────────
 if "data" in st.session_state:
 
     data = st.session_state["data"]
@@ -113,7 +112,7 @@ if "data" in st.session_state:
     st.subheader("📊 Extracted Data")
     st.json(data)
 
-    # Risk highlight
+    # Risk Highlight
     risk = data.get("risk_level", "")
 
     if risk == "High":
@@ -123,7 +122,7 @@ if "data" in st.session_state:
     else:
         st.success("✔ LOW RISK")
 
-    # Email input
+    # Email Input
     email = st.text_input("Enter email for alert")
 
     if st.button("📨 Send Alert Mail"):
@@ -148,9 +147,8 @@ if "data" in st.session_state:
         except Exception as e:
             st.error(f"Webhook error: {e}")
 
-
-# ── Footer ──────────────────────────────────────────────
+# ── Footer ──────────────────────────────────
 st.markdown("""
 ---
-Contract Risk Detector · Gemini 2.0 Flash · n8n Automation
+Contract Risk Detector · Gemini 1.5 Flash · n8n Automation
 """)
